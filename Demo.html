@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChickyMines 數值模擬與試玩器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap');
+        body { font-family: 'Noto Sans TC', sans-serif; }
+        .input-group label { display: block; font-size: 0.875rem; font-weight: 600; color: #374151; margin-bottom: 0.25rem; }
+        .input-group input, .input-group select { width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; background-color: #f9fafb; }
+        .highlight-row { background-color: #eff6ff; }
+        .diamond-text { color: #2563eb; font-weight: bold; }
+        .danger-text { color: #dc2626; font-weight: bold; }
+        .success-text { color: #16a34a; font-weight: bold; }
+        .bowl-win { color: #b91c1c; font-weight: bold; }
+        .blue-bowl-win { color: #2563eb; font-weight: bold; text-shadow: 0 0 5px rgba(59, 130, 246, 0.5); }
+        th { font-size: 0.8rem; white-space: nowrap; }
+        .rule-input { padding: 0.25rem; border: 1px solid #e5e7eb; border-radius: 0.25rem; width: 100%; text-align: center; }
+        .blue-rule-input { padding: 0.25rem; border: 1px solid #bfdbfe; border-radius: 0.25rem; width: 100%; text-align: center; background-color: #fff; }
+        
+        /* 遊戲專用樣式 */
+        .game-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.5rem; }
+        .game-cell { 
+            aspect-ratio: 1; 
+            border-radius: 0.5rem; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: 1.5rem; 
+            cursor: pointer; 
+            transition: all 0.2s;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .cell-hidden { background-color: #374151; color: white; border-bottom: 4px solid #1f2937; }
+        .cell-hidden:hover { background-color: #4b5563; transform: translateY(-2px); }
+        .cell-hidden:active { transform: translateY(0); border-bottom-width: 0; margin-top: 4px; }
+        .cell-revealed { background-color: #f3f4f6; border: 2px solid #e5e7eb; cursor: default; }
+        /* 鑽石格樣式 (視覺上偽裝成金幣，但保留一點區別供測試者識別，或完全一致) */
+        /* 這裡設定完全一致，只靠 console log 或後台數據得知 */
+        .cell-coin { background-color: #f3f4f6; border: 2px solid #e5e7eb; } 
+        .cell-bomb { background-color: #fca5a5; border: 2px solid #ef4444; }
+        
+        /* 賠率階梯表樣式 */
+        .payout-ladder::-webkit-scrollbar { width: 6px; }
+        .payout-ladder::-webkit-scrollbar-track { background: #f1f5f9; }
+        .payout-ladder::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .ladder-row { display: flex; justify-content: space-between; padding: 4px 8px; font-size: 0.85rem; border-bottom: 1px solid #e2e8f0; position: relative; overflow: hidden; }
+        .ladder-row.active { background-color: #dbeafe; font-weight: bold; border-left: 4px solid #2563eb; }
+        .ladder-row.passed { color: #9ca3af; }
+        .ladder-row.future-diamond { background-color: #fdf2f8; } /* 預告有鑽石 */
+        .ladder-row.hit-diamond { background-color: #fce7f3; color: #db2777; font-weight: bold; } /* 踩中鑽石 */
+
+        /* 掃光特效 */
+        @keyframes scan-flash {
+            0% { background-color: #bbf7d0; transform: scale(1); }
+            50% { background-color: #86efac; transform: scale(1.02); }
+            100% { background-color: transparent; transform: scale(1); }
+        }
+        .ladder-row.flash-update {
+            animation: scan-flash 0.6s ease-out;
+        }
+
+        /* 聚寶盆獲獎動畫 */
+        @keyframes bowl-pop {
+            0% { transform: scale(0.8); opacity: 0; }
+            50% { transform: scale(1.1); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .bowl-triggered {
+            animation: bowl-pop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+            border-width: 3px;
+        }
+
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.5s ease; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+    <div id="app" class="p-4 md:p-8 max-w-7xl mx-auto">
+        <!-- 頂部導航 -->
+        <div class="bg-slate-900 text-white rounded-t-xl overflow-hidden shadow-lg">
+            <div class="p-6 flex flex-col md:flex-row justify-between items-center gap-4 border-b border-slate-700">
+                <div>
+                    <h1 class="text-2xl font-bold tracking-wide">ChickyMines 數值中心</h1>
+                    <p class="text-slate-400 text-sm mt-1">Version 1.7.4 | 動態變價與聚寶盆模擬</p>
+                </div>
+                <!-- 頁籤切換 -->
+                <div class="flex bg-slate-800 p-1 rounded-lg">
+                    <button @click="activeTab = 'calc'" :class="['px-6 py-2 rounded-md text-sm font-bold transition', activeTab === 'calc' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white']">
+                        📊 數值配置
+                    </button>
+                    <button @click="activeTab = 'game'" :class="['px-6 py-2 rounded-md text-sm font-bold transition', activeTab === 'game' ? 'bg-green-600 text-white shadow' : 'text-slate-400 hover:text-white']">
+                        🎮 遊戲試玩
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 內容區域 -->
+        <div class="bg-white shadow-xl rounded-b-xl overflow-hidden min-h-[600px]">
+            
+            <!-- TAB 1: 數值模擬器 (Config) -->
+            <div v-show="activeTab === 'calc'" class="p-6">
+                <!-- 頂部操作列 -->
+                <div class="flex justify-end gap-2 mb-6">
+                    <label class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded shadow cursor-pointer flex items-center gap-2">
+                        <span>📤</span> 匯入設定
+                        <input type="file" id="importFileInput" accept=".json" class="hidden" @change="handleImport">
+                    </label>
+                    <button @click="exportConfig" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded shadow flex items-center gap-2">
+                        <span>📥</span> 匯出設定
+                    </button>
+                </div>
+
+                <!-- 參數控制面板 (Vue Binding) -->
+                <div class="p-6 bg-gray-50 border rounded-lg mb-6">
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                        <div class="input-group">
+                            <label>💣 炸彈數量</label>
+                            <select v-model.number="config.mines" @change="calculateTable">
+                                <option v-for="n in 20" :key="n" :value="n">{{ n }} 顆</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label>💰 初始應用 RTP (%)</label>
+                            <input type="number" v-model.number="config.baseRtp" step="0.5">
+                        </div>
+                        <div class="input-group">
+                            <label>📈 鑽石 RTP 增幅 (%)</label>
+                            <div class="flex gap-2">
+                                <input type="number" v-model.number="config.minInc" step="0.1" class="w-1/2 text-center">
+                                <span class="text-gray-400 py-2">~</span>
+                                <input type="number" v-model.number="config.maxInc" step="0.1" class="w-1/2 text-center">
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label>🛡️ 真實目標 RTP (%)</label>
+                            <input type="number" v-model.number="config.targetRtp" step="0.5" class="border-red-300 bg-red-50 text-red-700 font-bold">
+                            <div class="mt-1 text-xs text-gray-500 text-right font-mono">
+                                總 RTP: <span class="font-bold text-purple-600">{{ totalSystemRtp }}%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 聚寶盆設定 (紅/藍) -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- 紅聚寶盆 -->
+                        <div class="bg-red-50 border border-red-200 rounded p-4">
+                            <div class="flex justify-between items-center mb-2 cursor-pointer" @click="ui.redBagOpen = !ui.redBagOpen">
+                                <h3 class="font-bold text-red-800">🧧 紅聚寶盆 (倍率)</h3>
+                                <span class="text-xs text-red-600 font-bold">RTP: {{ redBagRtp }}%</span>
+                            </div>
+                            <div v-show="ui.redBagOpen">
+                                <div class="input-group mb-2">
+                                    <label class="text-xs text-red-800">觸發機率 (%)</label>
+                                    <input type="number" v-model.number="config.bagSystem.prob" step="0.01" class="border-red-300">
+                                </div>
+                                <div class="max-h-32 overflow-y-auto">
+                                    <table class="w-full text-xs text-center">
+                                        <tr v-for="(prize, idx) in config.bagSystem.prizes" :key="idx" class="border-b">
+                                            <td><input v-model.number="prize.mult" class="w-12 text-center border rounded"> x</td>
+                                            <td><input v-model.number="prize.weight" class="w-12 text-center border rounded"> w</td>
+                                            <td class="text-red-500 cursor-pointer" @click="removeRedPrize(idx)">×</td>
+                                        </tr>
+                                    </table>
+                                    <button @click="addRedPrize" class="w-full mt-1 text-xs bg-red-200 hover:bg-red-300 rounded">+ 獎項</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 藍聚寶盆 (升級版：動態權重表格) -->
+                        <div class="bg-blue-50 border border-blue-200 rounded p-4">
+                            <div class="flex justify-between items-center mb-2 cursor-pointer" @click="ui.blueBagOpen = !ui.blueBagOpen">
+                                <div class="flex items-center gap-2">
+                                    <h3 class="font-bold text-blue-900">💎 藍聚寶盆 (Jackpot)</h3>
+                                    <span class="text-xs bg-blue-100 text-blue-800 px-1 rounded">{{ blueBowlStats.weightMult.toFixed(1) }}x</span>
+                                </div>
+                                <span class="text-xs text-blue-600 font-bold">RTP: {{ blueBagRtp }}%</span>
+                            </div>
+                            <div v-show="ui.blueBagOpen">
+                                <div class="grid grid-cols-2 gap-2 mb-2">
+                                    <div class="input-group"><label class="text-xs">主池初始</label><input type="number" v-model.number="config.jpSystem.mainPoolInit"></div>
+                                    <div class="input-group"><label class="text-xs">副池門檻</label><input type="number" v-model.number="config.jpSystem.subPoolThreshold"></div>
+                                    <div class="input-group"><label class="text-xs">總權重</label><input type="number" v-model.number="config.jpSystem.totalWeight"></div>
+                                    <div class="input-group"><label class="text-xs">啟用門檻</label><input type="number" v-model.number="config.jpSystem.minBet"></div>
+                                    <div class="input-group"><label class="text-xs">主池灌水%</label><input type="number" v-model.number="config.jpSystem.mainPump" step="0.1"></div>
+                                    <div class="input-group"><label class="text-xs">副池灌水%</label><input type="number" v-model.number="config.jpSystem.subPump" step="0.1"></div>
+                                    <div class="input-group col-span-2 bg-blue-100 p-1 rounded"><label class="text-xs text-blue-900 font-bold">模擬 BET</label><input type="number" v-model.number="config.simBet" class="font-bold text-blue-800"></div>
+                                </div>
+                                
+                                <!-- 詳細權重表格 -->
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-xs text-left mb-2">
+                                        <thead class="bg-blue-100 text-blue-800">
+                                            <tr>
+                                                <th class="p-1">獎項</th>
+                                                <th class="p-1">水池%</th>
+                                                <th class="p-1">基礎</th>
+                                                <th class="p-1 text-blue-700">真實</th>
+                                                <th class="p-1 text-right">中獎%</th>
+                                                <th class="p-1"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr v-for="(stat, idx) in blueBowlStats.rows" :key="idx" class="border-b">
+                                                <td><input v-model="config.jpSystem.prizes[idx].name" class="w-10 border rounded px-1"></td>
+                                                <td><input v-model.number="config.jpSystem.prizes[idx].percent" class="w-8 text-center border rounded"></td>
+                                                <td><input v-model.number="config.jpSystem.prizes[idx].baseWeight" class="w-8 text-center border rounded"></td>
+                                                <td class="font-bold text-blue-600">{{ stat.realWeight.toLocaleString() }}</td>
+                                                <td class="text-right text-gray-500">{{ stat.probStr }}%</td>
+                                                <td class="text-center text-red-500 cursor-pointer" @click="removeBluePrize(idx)">×</td>
+                                            </tr>
+                                            <tr class="text-gray-400 italic">
+                                                <td colspan="3" class="pl-1">EMPTY</td>
+                                                <td class="text-center">{{ blueBowlStats.emptyWeight.toLocaleString() }}</td>
+                                                <td class="text-right">{{ blueBowlStats.emptyProb }}%</td>
+                                                <td></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                    <button @click="addBluePrize" class="w-full mt-1 text-xs bg-blue-200 hover:bg-blue-300 rounded">+ 獎項</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 鑽石規則 (收合) -->
+                    <div class="mt-4 bg-white border rounded p-2">
+                        <div class="flex justify-between cursor-pointer" @click="ui.rulesOpen = !ui.rulesOpen">
+                            <span class="text-sm font-bold text-gray-700">⚙️ 鑽石生成規則</span>
+                            <span class="text-xs text-blue-500">{{ ui.rulesOpen ? '收合' : '展開' }}</span>
+                        </div>
+                        <div v-show="ui.rulesOpen" class="mt-2">
+                            <table class="w-full text-xs text-center">
+                                <thead class="bg-gray-100"><tr><th>Min雷</th><th>Max雷</th><th>Min鑽</th><th>Max鑽</th><th>操作</th></tr></thead>
+                                <tbody>
+                                    <tr v-for="(rule, idx) in config.diamondRules" :key="idx" class="border-b">
+                                        <td><input v-model.number="rule.minMines" class="w-10 text-center border"></td>
+                                        <td><input v-model.number="rule.maxMines" class="w-10 text-center border"></td>
+                                        <td><input v-model.number="rule.minDiamonds" class="w-10 text-center border text-blue-600 font-bold"></td>
+                                        <td><input v-model.number="rule.maxDiamonds" class="w-10 text-center border text-blue-600 font-bold"></td>
+                                        <td><button @click="removeRule(idx)" class="text-red-500">×</button></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            <button @click="addRule" class="w-full mt-1 text-xs bg-gray-200 hover:bg-gray-300 rounded">+ 規則</button>
+                        </div>
+                    </div>
+
+                    <button @click="calculateTable" class="w-full mt-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded shadow-lg">
+                        🔄 重新計算表格 (重置鑽石位置)
+                    </button>
+                </div>
+
+                <!-- 數據表格 -->
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left text-gray-500">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-200 border-b-2 border-gray-300">
+                            <tr>
+                                <th class="px-4 py-3 text-center">步驟</th>
+                                <th class="px-4 py-3 text-right">表面<br>單步勝率</th>
+                                <th class="px-4 py-3 text-right">表面<br>累積勝率</th>
+                                <th class="px-4 py-3 text-center text-purple-700">應用 RTP<br>(模擬)</th>
+                                <th class="px-4 py-3 text-right bg-yellow-100 border-l border-yellow-200 text-slate-800 text-base">表面賠率</th>
+                                <th class="px-4 py-3 text-right bg-blue-50 border-l border-blue-200 text-blue-800">真實<br>累積勝率</th>
+                                <th class="px-4 py-3 text-right bg-blue-50 text-blue-600 font-bold text-base">真實<br>單步勝率</th>
+                                <th class="px-4 py-3 text-center text-gray-500">偏差</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="row in simResult.table" :key="row.step" class="border-b hover:bg-gray-50">
+                                <td class="px-4 py-2 text-center font-medium">{{ row.step }} <span v-if="row.isDiamond">💎</span></td>
+                                <td class="px-4 py-2 text-right">{{ (row.visualStepWin * 100).toFixed(2) }}%</td>
+                                <td class="px-4 py-2 text-right">{{ (row.visualCumWin * 100).toFixed(4) }}%</td>
+                                <td class="px-4 py-2 text-center text-purple-700">{{ row.appRtp.toFixed(2) }}% <span v-if="row.inc > 0" class="text-xs text-green-600 font-bold">(+{{row.inc}}%)</span></td>
+                                <td class="px-4 py-2 text-right font-bold bg-yellow-50 border-l border-yellow-200 text-lg">x {{ row.payout.toFixed(2) }}</td>
+                                <td class="px-4 py-2 text-right bg-blue-50 border-l border-blue-200">{{ (row.realCumWin * 100).toFixed(4) }}%</td>
+                                <td class="px-4 py-2 text-right bg-blue-50 text-blue-600 font-bold text-lg">{{ (row.realStepWin * 100).toFixed(4) }}%</td>
+                                <td class="px-4 py-2 text-center text-xs" :class="row.diff < 0 ? 'text-red-500' : 'text-green-500'">{{ (row.diff * 100).toFixed(2) }}%</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TAB 2: 遊戲試玩 (Playable Demo) -->
+            <div v-show="activeTab === 'game'" class="p-6 bg-slate-100 min-h-[600px] flex flex-col md:flex-row gap-6 justify-center items-start">
+                
+                <!-- 左側面板：聚寶盆狀態 (新增) -->
+                <div class="hidden md:flex flex-col gap-4 w-48">
+                    <!-- 紅聚寶盆 -->
+                    <div class="bg-red-50 border border-red-200 rounded-xl p-3 shadow text-center flex flex-col justify-center h-24"
+                         :class="{ 'border-red-500 shadow-red-200 bowl-triggered': gameState.redBagResult.triggered }">
+                        <span class="text-3xl mb-1">🧧</span>
+                        <div v-if="gameState.redBagResult.triggered">
+                            <span class="text-xs text-red-600 font-bold">贏得獎金</span>
+                            <div class="font-black text-xl text-red-700">${{ gameState.redBagResult.amount.toFixed(0) }}</div>
+                        </div>
+                        <div v-else class="text-gray-400 text-sm font-bold">紅聚寶盆</div>
+                    </div>
+
+                    <!-- 藍聚寶盆 -->
+                    <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 shadow text-center flex flex-col justify-center h-24"
+                         :class="{ 'border-blue-500 shadow-blue-200 bowl-triggered': gameState.blueBagResult.triggered }">
+                        <span class="text-3xl mb-1">💎</span>
+                        <div v-if="gameState.blueBagResult.triggered">
+                            <span class="text-xs text-blue-600 font-bold">JACKPOT</span>
+                            <div class="font-black text-xl text-blue-700">{{ gameState.blueBagResult.name }}</div>
+                        </div>
+                        <div v-else class="text-gray-400 text-sm font-bold">藍聚寶盆</div>
+                    </div>
+                </div>
+
+                <!-- 中間：遊戲盤面與操作 -->
+                <div class="w-full max-w-lg flex flex-col items-center">
+                    <!-- 遊戲狀態列 -->
+                    <div class="w-full flex justify-between items-center mb-4 bg-white p-3 rounded-lg shadow">
+                        <div class="flex flex-col">
+                            <span class="text-xs text-gray-500">BALANCE</span>
+                            <span class="font-bold text-xl text-slate-800">${{ gameState.balance.toFixed(2) }}</span>
+                        </div>
+                        <div class="flex flex-col items-end">
+                            <span class="text-xs text-gray-500">CURRENT WIN</span>
+                            <span class="font-bold text-xl text-green-600">${{ gameState.currentWin.toFixed(2) }}</span>
+                        </div>
+                    </div>
+
+                    <!-- 遊戲訊息 -->
+                    <transition name="fade">
+                        <div v-if="gameState.message" class="mb-4 px-4 py-2 rounded shadow-lg text-center font-bold w-full" 
+                             :class="gameState.messageType === 'win' ? 'bg-green-100 text-green-800' : (gameState.messageType === 'loss' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800')">
+                            {{ gameState.message }}
+                        </div>
+                    </transition>
+
+                    <!-- 遊戲盤面 (5x5) -->
+                    <div class="w-full aspect-square bg-white p-4 rounded-xl shadow-lg border-4 border-slate-200 mb-6">
+                        <div class="game-grid h-full w-full">
+                            <div v-for="(cell, index) in gameState.grid" :key="index" 
+                                 class="game-cell font-bold text-2xl select-none"
+                                 :class="getCellClass(cell)"
+                                 @click="onCellClick(index)">
+                                <span v-if="cell.revealed">
+                                    <span v-if="cell.type === 'coin' || cell.type === 'diamond'">🟡</span>
+                                    <span v-else-if="cell.type === 'bomb'">💣</span>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 操作區 -->
+                    <div class="w-full flex gap-4">
+                        <div class="flex-1 bg-white p-3 rounded-lg shadow">
+                            <div class="flex justify-between text-sm mb-1">
+                                <span class="text-gray-500">BET</span>
+                                <span class="font-bold">{{ config.simBet }}</span>
+                            </div>
+                            <div class="flex justify-between text-sm">
+                                <span class="text-gray-500">MINES</span>
+                                <span class="font-bold">{{ config.mines }}</span>
+                            </div>
+                        </div>
+
+                        <div class="flex-1">
+                            <button v-if="gameState.status === 'IDLE' || gameState.status === 'GAMEOVER' || gameState.status === 'CASHOUT'" 
+                                    @click="startGame" 
+                                    class="w-full h-full bg-green-500 hover:bg-green-600 text-white font-black text-xl rounded-lg shadow transition active:scale-95">
+                                BET
+                            </button>
+                            <button v-else 
+                                    @click="cashOut" 
+                                    :disabled="gameState.currentStep === 0"
+                                    :class="['w-full h-full text-white font-black text-xl rounded-lg shadow transition active:scale-95 flex flex-col justify-center items-center', gameState.currentStep === 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600']">
+                                <span>CASH OUT</span>
+                                <span class="text-sm font-normal">${{ gameState.currentWin.toFixed(2) }}</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右側：賠率階梯 (Payout Ladder) -->
+                <div class="w-full md:w-64 bg-white rounded-xl shadow-lg overflow-hidden flex flex-col h-[600px]">
+                    <div class="bg-slate-100 p-3 text-center border-b border-slate-200">
+                        <h3 class="font-bold text-slate-700">賠率表 (Payouts)</h3>
+                        <p class="text-xs text-slate-500">鑽石位置已標示 💎</p>
+                    </div>
+                    <div class="flex-1 overflow-y-auto payout-ladder p-2">
+                        <div v-for="(stepInfo, idx) in gameState.ladder" :key="idx" 
+                             class="ladder-row"
+                             :class="{ 
+                                'active': gameState.currentStep === stepInfo.step,
+                                'passed': gameState.currentStep > stepInfo.step,
+                                'hit-diamond': stepInfo.isDiamond && gameState.currentStep >= stepInfo.step,
+                                'future-diamond': stepInfo.isDiamond && gameState.currentStep < stepInfo.step,
+                                'flash-update': stepInfo.flash 
+                             }">
+                            <div class="flex items-center gap-2">
+                                <span class="w-6 text-center text-gray-400">{{ stepInfo.step }}</span>
+                                <span v-if="stepInfo.isDiamond">💎</span>
+                            </div>
+                            <div class="font-mono font-bold">x {{ stepInfo.payout.toFixed(2) }}</div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, reactive, computed, onMounted } = Vue;
+
+        createApp({
+            setup() {
+                const activeTab = ref('calc');
+                
+                // 共享的鑽石分佈 (模擬表與遊戲共用)
+                const currentDiamondSet = ref(new Set());
+
+                // --- 核心配置 (Config) ---
+                const config = reactive({
+                    mines: 3,
+                    baseRtp: 97.0,
+                    targetRtp: 95.0,
+                    minInc: 2.0,
+                    maxInc: 4.0,
+                    simBet: 100,
+                    diamondRules: [
+                        { minMines: 1, maxMines: 5, minDiamonds: 5, maxDiamonds: 12 },
+                        { minMines: 6, maxMines: 10, minDiamonds: 5, maxDiamonds: 9 },
+                        { minMines: 11, maxMines: 15, minDiamonds: 3, maxDiamonds: 14 },
+                        { minMines: 16, maxMines: 20, minDiamonds: 2, maxDiamonds: 9 }
+                    ],
+                    bagSystem: {
+                        prob: 0.5,
+                        prizes: [
+                            { mult: 1, weight: 150 }, { mult: 2, weight: 300 },
+                            { mult: 3, weight: 60 }, { mult: 4, weight: 30 }, { mult: 5, weight: 10 }
+                        ]
+                    },
+                    jpSystem: {
+                        mainPump: 0.3, subPump: 0.2,
+                        totalWeight: 100000000, minBet: 1,
+                        mainPoolInit: 100000, subPoolThreshold: 120000, // 新增
+                        prizes: [
+                            { name: "MINI", baseWeight: 20, percent: 5 },
+                            { name: "MINOR", baseWeight: 10, percent: 10 },
+                            { name: "MAJOR", baseWeight: 5, percent: 20 },
+                            { name: "GRAND", baseWeight: 2, percent: 50 }
+                        ]
+                    }
+                });
+
+                // UI 狀態 (展開/收合)
+                const ui = reactive({
+                    redBagOpen: false,
+                    blueBagOpen: false,
+                    rulesOpen: false
+                });
+
+                // 模擬結果表格
+                const simResult = reactive({ table: [] });
+
+                // --- 遊戲試玩狀態 ---
+                const gameState = reactive({
+                    status: 'IDLE', // IDLE, PLAYING, GAMEOVER, CASHOUT
+                    balance: 10000,
+                    currentWin: 0,
+                    grid: [], // Array of 25 cells
+                    currentStep: 0,
+                    currentVisualRtp: 0,
+                    prevRealCumWin: 1.0,
+                    visualCumWin: 1.0,
+                    diamondSet: new Set(),
+                    nextMultiplier: 0,
+                    message: '',
+                    messageType: '',
+                    ladder: [], // 賠率階梯表
+                    // 新增：聚寶盆結果
+                    redBagResult: { triggered: false, amount: 0 },
+                    blueBagResult: { triggered: false, name: '' }
+                });
+
+                // --- 計算屬性 (紅色) ---
+                const redBagRtp = computed(() => {
+                    let totalW = config.bagSystem.prizes.reduce((s, p) => s + (p.weight || 0), 0);
+                    let weightedSum = config.bagSystem.prizes.reduce((s, p) => s + (p.mult * (p.weight || 0)), 0);
+                    let avgMult = totalW > 0 ? weightedSum / totalW : 0;
+                    return (config.bagSystem.prob / 100 * avgMult * 100).toFixed(2);
+                });
+
+                // --- 計算屬性 (藍色詳細) ---
+                const blueBowlStats = computed(() => {
+                    const minBet = config.jpSystem.minBet || 1;
+                    const simBet = config.simBet || 100;
+                    const totalSysWeight = config.jpSystem.totalWeight || 100000000;
+                    
+                    let weightMult = 1;
+                    if(simBet >= minBet) {
+                        weightMult = simBet / minBet;
+                    }
+
+                    let prizeSumWeight = 0;
+                    const rows = config.jpSystem.prizes.map(p => {
+                        const baseW = p.baseWeight || 0;
+                        const realW = baseW * weightMult;
+                        prizeSumWeight += realW;
+                        return {
+                            realWeight: realW,
+                            probStr: (realW / totalSysWeight * 100).toFixed(6)
+                        };
+                    });
+
+                    const emptyW = totalSysWeight - prizeSumWeight;
+                    const emptyProb = (emptyW / totalSysWeight * 100).toFixed(6);
+
+                    return { weightMult, rows, emptyWeight: emptyW, emptyProb };
+                });
+
+                const blueBagRtp = computed(() => {
+                    return ((config.jpSystem.mainPump || 0) + (config.jpSystem.subPump || 0)).toFixed(2);
+                });
+
+                const totalSystemRtp = computed(() => {
+                    return (config.targetRtp + parseFloat(redBagRtp.value) + parseFloat(blueBagRtp.value)).toFixed(2);
+                });
+
+                // --- 邏輯函數：鑽石生成 ---
+                const getDiamondRange = (mines) => {
+                    const rule = config.diamondRules.find(r => mines >= r.minMines && mines <= r.maxMines);
+                    return rule ? [rule.minDiamonds, rule.maxDiamonds] : [0, 0];
+                };
+
+                const generateDiamonds = (totalCells, mines) => {
+                    const safeCells = totalCells - mines;
+                    const [minD, maxD] = getDiamondRange(mines);
+                    const targetCount = Math.floor(Math.random() * (maxD - minD + 1)) + minD;
+                    
+                    let available = [];
+                    for(let i=2; i < safeCells; i++) available.push(i); // 排除首尾 (1 based index in logic)
+                    
+                    let diamonds = new Set();
+                    let tempAvail = [...available];
+                    
+                    while(diamonds.size < targetCount && tempAvail.length > 0) {
+                        const idx = Math.floor(Math.random() * tempAvail.length);
+                        const pick = tempAvail[idx];
+                        diamonds.add(pick);
+                        tempAvail = tempAvail.filter(x => x !== pick && x !== pick-1 && x !== pick+1);
+                    }
+                    return diamonds;
+                };
+
+                // --- 邏輯函數：數值表計算 ---
+                const calculateTable = () => {
+                    const totalCells = 25;
+                    const safeCells = totalCells - config.mines;
+                    
+                    // 重新生成一組鑽石並更新共享狀態
+                    const simDiamonds = generateDiamonds(totalCells, config.mines);
+                    currentDiamondSet.value = simDiamonds;
+                    
+                    let rows = [];
+                    let vCum = 1.0;
+                    let rCum = 1.0;
+                    let appRtp = config.baseRtp;
+
+                    for(let step=1; step<=safeCells; step++) {
+                        let vStep = (safeCells - step + 1) / (totalCells - step + 1);
+                        vCum *= vStep;
+                        
+                        let inc = 0;
+                        if(simDiamonds.has(step)) {
+                            inc = Math.random() * (config.maxInc - config.minInc) + config.minInc;
+                            inc = Math.round(inc * 10) / 10;
+                            appRtp += inc;
+                        }
+                        
+                        let rawPayout = (1 / vCum) * (appRtp / 100);
+                        let payout = Math.round(rawPayout * 100) / 100;
+                        if(payout < 1.00) payout = 1.00;
+                        
+                        let targetRealCum = (config.targetRtp / 100) / payout;
+                        let realStep = targetRealCum / rCum;
+                        let diff = realStep - vStep;
+                        
+                        rows.push({
+                            step, isDiamond: simDiamonds.has(step),
+                            visualStepWin: vStep, visualCumWin: vCum,
+                            appRtp, inc, payout,
+                            realCumWin: targetRealCum, realStepWin: realStep,
+                            diff
+                        });
+                        rCum = targetRealCum;
+                    }
+                    simResult.table = rows;
+                };
+
+                // --- 階梯表即時計算邏輯 (核心更新) ---
+                const recalculateFuturePayouts = (baseRtp, currentStep, visualCumWin) => {
+                    const totalCells = 25;
+                    const safeCells = 25 - config.mines;
+                    let newLadder = [];
+                    
+                    // 保留已經走過的層級 (歷史不可變)
+                    for (let i = 0; i < currentStep; i++) {
+                        newLadder.push(gameState.ladder[i]);
+                    }
+
+                    // 重新計算未來層級
+                    let tempVCum = visualCumWin; 
+                    let tempRtp = baseRtp; 
+
+                    for (let step = currentStep + 1; step <= safeCells; step++) {
+                        // 1. 計算該步累積機率
+                        let vStep = (safeCells - step + 1) / (totalCells - step + 1);
+                        tempVCum *= vStep;
+
+                        // 3. 計算賠率
+                        let rawPayout = (1 / tempVCum) * (tempRtp / 100);
+                        let payout = Math.round(rawPayout * 100) / 100;
+                        if(payout < 1.00) payout = 1.00;
+
+                        // 檢測數值是否變動 (觸發掃光特效)
+                        let oldPayout = 0;
+                        if (gameState.ladder[step-1]) {
+                            oldPayout = gameState.ladder[step-1].payout;
+                        }
+                        
+                        newLadder.push({
+                            step: step,
+                            isDiamond: gameState.diamondSet.has(step),
+                            payout: payout,
+                            flash: (currentStep > 0 && payout > oldPayout) // 只有真正遊玩且賠率上升時才閃爍
+                        });
+                    }
+                    
+                    gameState.ladder = newLadder;
+                    
+                    // 移除 flash 標記 (CSS動畫結束後)
+                    setTimeout(() => {
+                        gameState.ladder.forEach(row => row.flash = false);
+                    }, 600);
+                };
+
+                // --- 遊戲邏輯 ---
+                const startGame = () => {
+                    if (gameState.balance < config.simBet) {
+                        showMessage('餘額不足！', 'error');
+                        return;
+                    }
+                    
+                    // 重置聚寶盆結果 (保留到下一局開始前才清空)
+                    gameState.redBagResult = { triggered: false, amount: 0 };
+                    gameState.blueBagResult = { triggered: false, name: '' };
+
+                    // 扣款與重置狀態
+                    gameState.balance -= config.simBet;
+                    gameState.currentWin = 0;
+                    gameState.status = 'PLAYING';
+                    gameState.currentStep = 0;
+                    gameState.currentVisualRtp = config.baseRtp;
+                    gameState.prevRealCumWin = 1.0;
+                    gameState.visualCumWin = 1.0;
+                    gameState.message = '';
+                    
+                    // 1. 使用共享的鑽石分佈 (確保跟 Config 頁面一致)
+                    gameState.diamondSet = currentDiamondSet.value;
+                    
+                    // 2. 初始化格子 (僅前端狀態)
+                    gameState.grid = Array(25).fill(null).map(() => ({
+                        revealed: false,
+                        type: 'unknown' 
+                    }));
+
+                    // 3. 觸發紅聚寶盆 (獨立事件)
+                    if(Math.random() < config.bagSystem.prob / 100) {
+                        let totalW = config.bagSystem.prizes.reduce((s,p)=>s+p.weight,0);
+                        let rnd = Math.random() * totalW;
+                        let sum = 0;
+                        for(let p of config.bagSystem.prizes) {
+                            sum += p.weight;
+                            if(rnd < sum) {
+                                let win = config.simBet * p.mult;
+                                gameState.balance += win; // 立即入帳
+                                // 設置結果與動畫狀態
+                                gameState.redBagResult = { triggered: true, amount: win };
+                                break;
+                            }
+                        }
+                    }
+
+                    // 4. 觸發藍聚寶盆 (獨立事件) - 模擬邏輯
+                    const stats = blueBowlStats.value;
+                    const totalSysWeight = config.jpSystem.totalWeight || 100000000;
+                    const randBlue = Math.random() * totalSysWeight;
+                    let currentWeightCursor = 0;
+                    for (let prize of config.jpSystem.prizes) {
+                        let realWeight = prize.baseWeight * stats.weightMult;
+                        currentWeightCursor += realWeight;
+                        if (randBlue < currentWeightCursor) {
+                            // 中獎
+                            gameState.blueBagResult = { triggered: true, name: prize.name };
+                            // 藍聚寶盆通常也會有獎金，這裡假設只顯示名稱，如需加錢可在此處
+                            break;
+                        }
+                    }
+                    
+                    // 計算第一步的預期倍率顯示
+                    calculateNextMultiplier();
+                    // 初始化階梯表 (第 0 步)
+                    recalculateFuturePayouts(config.baseRtp, 0, 1.0);
+                };
+
+                const calculateNextMultiplier = () => {
+                    const step = gameState.currentStep + 1;
+                    const safeCells = 25 - config.mines;
+                    if(step > safeCells) return;
+                    
+                    // 從階梯表直接拿
+                    if (gameState.ladder.length >= step) {
+                        gameState.nextMultiplier = gameState.ladder[step-1].payout;
+                    }
+                };
+
+                const onCellClick = (index) => {
+                    if(gameState.status !== 'PLAYING') return;
+                    if(gameState.grid[index].revealed) return;
+
+                    const step = gameState.currentStep + 1;
+                    const safeCells = 25 - config.mines;
+                    const totalCells = 25;
+
+                    // 1. 表層計算
+                    let vStepWin = (safeCells - step + 1) / (totalCells - step + 1);
+                    gameState.visualCumWin *= vStepWin;
+
+                    // 2. 鑽石判定與變價
+                    let isDiamond = gameState.diamondSet.has(step);
+                    if(isDiamond) {
+                        let inc = Math.random() * (config.maxInc - config.minInc) + config.minInc;
+                        inc = Math.round(inc * 10) / 10;
+                        gameState.currentVisualRtp += inc;
+                        
+                        // [關鍵] 觸發變價：重新計算從這一步開始的所有未來賠率
+                        // 注意：這一步本身的賠率也要用新的 RTP 算
+                    }
+
+                    // 3. 計算當下賠率 (這一步的實際賠率)
+                    let rawPayout = (1 / gameState.visualCumWin) * (gameState.currentVisualRtp / 100);
+                    let displayPayout = Math.round(rawPayout * 100) / 100;
+                    if(displayPayout < 1.00) displayPayout = 1.00;
+
+                    // 如果這一步有鑽石，我們需要更新階梯表，把這一步以後的賠率都墊高
+                    if(isDiamond) {
+                        recalculateFuturePayouts(gameState.currentVisualRtp, step - 1, gameState.visualCumWin / vStepWin);
+                        // 修正：剛剛的 recalculate 是基於 step-1 往下算，會算出 step 的新賠率
+                        // 確保階梯表上這一步的顯示跟實際計算一致
+                    }
+
+                    // 4. 裡層生死判定
+                    let targetRealCum = (config.targetRtp / 100) / displayPayout;
+                    let realStepWin = targetRealCum / gameState.prevRealCumWin;
+                    gameState.prevRealCumWin = targetRealCum; // 更新狀態
+
+                    // RNG
+                    if(Math.random() > realStepWin) {
+                        // 💥 爆炸
+                        gameState.grid[index].revealed = true;
+                        gameState.grid[index].type = 'bomb';
+                        gameOver(index);
+                    } else {
+                        // ✅ 存活
+                        gameState.grid[index].revealed = true;
+                        // 重要修改：即便踩到鑽石，視覺上也顯示金幣 (coin)
+                        gameState.grid[index].type = 'coin'; // 偽裝成金幣
+                        gameState.currentStep++;
+                        gameState.currentWin = config.simBet * displayPayout;
+                        
+                        // 更新階梯表上的狀態 (如果沒鑽石，賠率不變，只是游標移動)
+                        // 如果有鑽石，上面已經觸發 recalculate 了
+                        
+                        if(gameState.currentStep === safeCells) {
+                            cashOut(); // 通關自動領獎
+                        } else {
+                            calculateNextMultiplier();
+                        }
+                    }
+                };
+
+                const cashOut = () => {
+                    if(gameState.status !== 'PLAYING') return;
+                    if(gameState.currentStep === 0) return; // 防呆
+                    
+                    gameState.balance += gameState.currentWin;
+                    gameState.status = 'CASHOUT';
+                    showMessage(`💰 提領成功！贏得 $${gameState.currentWin.toFixed(2)}`, 'win');
+                    revealAll();
+                };
+
+                const gameOver = (bombIndex) => {
+                    gameState.status = 'GAMEOVER';
+                    gameState.currentWin = 0;
+                    showMessage('💥 爆炸了！', 'loss');
+                    revealAll(bombIndex);
+                };
+
+                const revealAll = (triggerIndex = -1) => {
+                    let minesLeft = config.mines;
+                    if (triggerIndex !== -1) minesLeft--; 
+
+                    // 找出所有未翻開的格子索引
+                    let unrevealedIndices = [];
+                    gameState.grid.forEach((cell, idx) => {
+                        if (!cell.revealed) unrevealedIndices.push(idx);
+                    });
+
+                    // 洗牌算法 (Fisher-Yates shuffle)
+                    for (let i = unrevealedIndices.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [unrevealedIndices[i], unrevealedIndices[j]] = [unrevealedIndices[j], unrevealedIndices[i]];
+                    }
+
+                    // 前 minesLeft 個放炸彈，剩下放金幣
+                    unrevealedIndices.forEach((gridIdx, i) => {
+                        const cell = gameState.grid[gridIdx];
+                        cell.revealed = true;
+                        if (i < minesLeft) {
+                            cell.type = 'bomb';
+                        } else {
+                            cell.type = 'coin';
+                        }
+                    });
+                };
+
+                const showMessage = (msg, type) => {
+                    gameState.message = msg;
+                    gameState.messageType = type;
+                    setTimeout(() => gameState.message = '', 3000);
+                };
+
+                const getCellClass = (cell) => {
+                    if (!cell.revealed) return 'cell-hidden';
+                    if (cell.type === 'coin') return 'cell-revealed text-yellow-500';
+                    if (cell.type === 'diamond') return 'cell-diamond text-2xl'; // 此樣式可能不再使用，因已統一顯示 coin
+                    if (cell.type === 'bomb') return 'cell-bomb';
+                    return '';
+                };
+
+                // --- 匯入/匯出 ---
+                const safeFloat = (val) => {
+                    const n = parseFloat(val);
+                    return isNaN(n) ? 0 : n;
+                };
+
+                const exportConfig = () => {
+                    // 防呆處理：確保數值有效，避免 NaN 轉成 null
+                    const mainPump = safeFloat(config.jpSystem.mainPump) / 100;
+                    const subPump = safeFloat(config.jpSystem.subPump) / 100;
+                    const totalWeight = safeFloat(config.jpSystem.totalWeight) || 100000000;
+                    const minBet = safeFloat(config.jpSystem.minBet) || 1;
+                    const mainPoolInit = safeFloat(config.jpSystem.mainPoolInit) || 100000;
+                    const subPoolThreshold = safeFloat(config.jpSystem.subPoolThreshold) || 120000;
+
+                    const data = {
+                        gameConfig: { gameName: "ChickyMines", simulationBet: config.simBet, simulationRuns: 100000000, totalCells: 25, minMines: 1, maxMines: 20 },
+                        mathModel: { minesTargetRTP: config.targetRtp/100, baseAppRTP: config.baseRtp/100, diamondIncMin: config.minInc/100, diamondIncMax: config.maxInc/100 },
+                        diamondGenerationRules: config.diamondRules,
+                        bagSystem: { triggerProbability: config.bagSystem.prob/100, prizes: config.bagSystem.prizes.map(p=>({multiplier: p.mult, weight: p.weight})) },
+                        jpSystem: { 
+                            totalWeight: totalWeight,
+                            baseThreshold: minBet,
+                            mainPoolInit: mainPoolInit,
+                            subPoolThreshold: subPoolThreshold,
+                            mainPoolPump: mainPump, 
+                            subPoolPump: subPump, 
+                            baseWeights: config.jpSystem.prizes.map(p => ({
+                                name: p.name,
+                                weight: p.baseWeight,
+                                payout: p.percent / 100
+                            }))
+                        }
+                    };
+                    const blob = new Blob([JSON.stringify(data, null, 2)], {type: "application/json"});
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url; a.download = "ChickyMines_Config.json"; a.click();
+                };
+
+                const handleImport = (e) => {
+                    const file = e.target.files[0];
+                    if(!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                        try {
+                            const json = JSON.parse(ev.target.result);
+                            if(json.gameConfig) {
+                                config.simBet = json.gameConfig.simulationBet || 100;
+                            }
+                            if(json.mathModel) {
+                                config.targetRtp = json.mathModel.minesTargetRTP * 100;
+                                config.baseRtp = json.mathModel.baseAppRTP * 100;
+                                config.minInc = json.mathModel.diamondIncMin * 100;
+                                config.maxInc = json.mathModel.diamondIncMax * 100;
+                            }
+                            if(json.bagSystem) {
+                                config.bagSystem.prob = json.bagSystem.triggerProbability * 100;
+                                config.bagSystem.prizes = json.bagSystem.prizes.map(p => ({mult: p.multiplier, weight: p.weight}));
+                            }
+                            if(json.jpSystem) {
+                                config.jpSystem.mainPump = (json.jpSystem.mainPoolPump || 0) * 100;
+                                config.jpSystem.subPump = (json.jpSystem.subPoolPump || 0) * 100;
+                                config.jpSystem.totalWeight = json.jpSystem.totalWeight || 100000000;
+                                config.jpSystem.minBet = json.jpSystem.baseThreshold || 1;
+                                config.jpSystem.mainPoolInit = json.jpSystem.mainPoolInit || 100000;
+                                config.jpSystem.subPoolThreshold = json.jpSystem.subPoolThreshold || 120000;
+                                
+                                if(json.jpSystem.baseWeights) {
+                                    config.jpSystem.prizes = json.jpSystem.baseWeights
+                                        .filter(p => p.name !== "EMPTY")
+                                        .map(p => ({
+                                            name: p.name,
+                                            baseWeight: p.weight,
+                                            percent: p.payout * 100
+                                        }));
+                                }
+                            }
+                            if(json.diamondGenerationRules) config.diamondRules = json.diamondGenerationRules;
+                            calculateTable();
+                            alert('匯入成功');
+                        } catch(err) { alert('格式錯誤'); console.error(err); }
+                    };
+                    reader.readAsText(file);
+                    // 清空檔案輸入，避免重複選擇同一檔案無法觸發 change
+                    e.target.value = '';
+                };
+
+                // Helper for UI
+                const addRedPrize = () => config.bagSystem.prizes.push({mult:1, weight:10});
+                const removeRedPrize = (i) => config.bagSystem.prizes.splice(i,1);
+                const addBluePrize = () => config.jpSystem.prizes.push({name:'NEW', baseWeight:1, percent:1});
+                const removeBluePrize = (i) => config.jpSystem.prizes.splice(i,1);
+                const addRule = () => config.diamondRules.push({minMines:1,maxMines:1,minDiamonds:1,maxDiamonds:1});
+                const removeRule = (i) => config.diamondRules.splice(i,1);
+
+                onMounted(() => {
+                    calculateTable();
+                });
+
+                return {
+                    activeTab, config, ui, simResult, gameState,
+                    redBagRtp, blueBagRtp, blueBowlStats, totalSystemRtp,
+                    startGame, onCellClick, cashOut, getCellClass,
+                    calculateTable, exportConfig, handleImport,
+                    addRedPrize, removeRedPrize, addBluePrize, removeBluePrize, addRule, removeRule
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
