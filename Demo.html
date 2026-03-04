@@ -681,7 +681,8 @@
                         }
                         
                         let rawPayout = (1 / vCum) * (appRtp / 100);
-                        let payout = Math.round(rawPayout * 100) / 100;
+						// 加上 Number.EPSILON 抵銷浮點數微小凹陷
+						let payout = Math.round((rawPayout + Number.EPSILON) * 100) / 100;
                         if(payout < 1.00) payout = 1.00;
                         
                         let targetRealCum = (config.targetRtp / 100) / payout;
