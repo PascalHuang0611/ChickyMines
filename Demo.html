@@ -87,7 +87,7 @@
             <div class="p-6 flex flex-col md:flex-row justify-between items-center gap-4 border-b border-slate-700">
                 <div>
                     <h1 class="text-2xl font-bold tracking-wide">ChickyMines 數值中心</h1>
-                    <p class="text-slate-400 text-sm mt-1">Version 1.7.4 | 動態變價與聚寶盆模擬</p>
+                    <p class="text-slate-400 text-sm mt-1">Version 1.7.5 | 動態變價與聚寶盆模擬 (Dev Mode)</p>
                 </div>
                 <!-- 頁籤切換 -->
                 <div class="flex bg-slate-800 p-1 rounded-lg">
@@ -252,13 +252,27 @@
                         </div>
                     </div>
 
+                    <!-- 定向生成規則 (收合) - NEW FEATURE -->
+                    <div class="mt-4 bg-white border border-purple-200 rounded p-2">
+                        <div class="flex justify-between cursor-pointer" @click="ui.customInputOpen = !ui.customInputOpen">
+                            <span class="text-sm font-bold text-purple-700">🎯 定向鑽石配置 (開發測試用)</span>
+                            <span class="text-xs text-purple-500">{{ ui.customInputOpen ? '收合' : '展開' }}</span>
+                        </div>
+                        <div v-show="ui.customInputOpen" class="mt-2">
+                            <textarea v-model="config.customDiamondString" 
+                                      class="w-full text-xs p-2 border border-purple-200 rounded bg-purple-50 focus:outline-none focus:border-purple-500"
+                                      rows="3"
+                                      placeholder="格式: 步驟:RTP增幅 (多組以逗號分隔)&#10;例如: 1:2.5, 3:3.0, 5:4.2&#10;若輸入此欄位，將忽略上方隨機規則"></textarea>
+                        </div>
+                    </div>
+
                     <button @click="calculateTable" class="w-full mt-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded shadow-lg">
                         🔄 重新計算表格 (重置鑽石位置)
                     </button>
                 </div>
 
                 <!-- 數據表格 -->
-                <div class="overflow-x-auto">
+                <div class="overflow-x-auto pb-8">
                     <table class="w-full text-sm text-left text-gray-500">
                         <thead class="text-xs text-gray-700 uppercase bg-gray-200 border-b-2 border-gray-300">
                             <tr>
@@ -275,12 +289,46 @@
                         <tbody>
                             <tr v-for="row in simResult.table" :key="row.step" class="border-b hover:bg-gray-50">
                                 <td class="px-4 py-2 text-center font-medium">{{ row.step }} <span v-if="row.isDiamond">💎</span></td>
-                                <td class="px-4 py-2 text-right">{{ (row.visualStepWin * 100).toFixed(2) }}%</td>
-                                <td class="px-4 py-2 text-right">{{ (row.visualCumWin * 100).toFixed(4) }}%</td>
+                                
+                                <!-- 表面單步勝率 (Tooltip) -->
+                                <!-- 針對此欄位加入自動斷行處理 (formatSplit + whitespace-pre) -->
+                                <td class="px-4 py-2 text-right relative group">
+                                    <span class="cursor-help border-b border-dotted border-gray-400">{{ (row.visualStepWin * 100).toFixed(2) }}%</span>
+                                    <div class="invisible group-hover:visible absolute right-0 bottom-full mb-1 p-2 bg-gray-800 text-white text-xs rounded shadow-lg z-50 font-mono whitespace-pre text-left">
+                                        {{ formatSplit(row.visualStepWin) }}
+                                    </div>
+                                </td>
+
+                                <!-- 表面累積勝率 (Tooltip) -->
+                                <!-- 修改：使用 formatSplit + whitespace-pre -->
+                                <td class="px-4 py-2 text-right relative group">
+                                    <span class="cursor-help border-b border-dotted border-gray-400">{{ (row.visualCumWin * 100).toFixed(4) }}%</span>
+                                    <div class="invisible group-hover:visible absolute right-0 bottom-full mb-1 p-2 bg-gray-800 text-white text-xs rounded shadow-lg z-50 font-mono whitespace-pre text-left">
+                                        {{ formatSplit(row.visualCumWin) }}
+                                    </div>
+                                </td>
+
                                 <td class="px-4 py-2 text-center text-purple-700">{{ row.appRtp.toFixed(2) }}% <span v-if="row.inc > 0" class="text-xs text-green-600 font-bold">(+{{row.inc}}%)</span></td>
                                 <td class="px-4 py-2 text-right font-bold bg-yellow-50 border-l border-yellow-200 text-lg">x {{ row.payout.toFixed(2) }}</td>
-                                <td class="px-4 py-2 text-right bg-blue-50 border-l border-blue-200">{{ (row.realCumWin * 100).toFixed(4) }}%</td>
-                                <td class="px-4 py-2 text-right bg-blue-50 text-blue-600 font-bold text-lg">{{ (row.realStepWin * 100).toFixed(4) }}%</td>
+                                
+                                <!-- 真實累積勝率 (Tooltip) -->
+                                <!-- 修改：使用 formatSplit + whitespace-pre -->
+                                <td class="px-4 py-2 text-right bg-blue-50 border-l border-blue-200 relative group">
+                                    <span class="cursor-help border-b border-dotted border-blue-300">{{ (row.realCumWin * 100).toFixed(4) }}%</span>
+                                    <div class="invisible group-hover:visible absolute right-0 bottom-full mb-1 p-2 bg-gray-800 text-white text-xs rounded shadow-lg z-50 font-mono whitespace-pre text-left">
+                                        {{ formatSplit(row.realCumWin) }}
+                                    </div>
+                                </td>
+
+                                <!-- 真實單步勝率 (Tooltip) -->
+                                <!-- 修改：使用 formatSplit + whitespace-pre -->
+                                <td class="px-4 py-2 text-right bg-blue-50 text-blue-600 font-bold text-lg relative group">
+                                    <span class="cursor-help border-b border-dotted border-blue-400">{{ (row.realStepWin * 100).toFixed(4) }}%</span>
+                                    <div class="invisible group-hover:visible absolute right-0 bottom-full mb-1 p-2 bg-gray-800 text-white text-xs rounded shadow-lg z-50 font-mono font-normal whitespace-pre text-left">
+                                        {{ formatSplit(row.realStepWin) }}
+                                    </div>
+                                </td>
+
                                 <td class="px-4 py-2 text-center text-xs" :class="row.diff < 0 ? 'text-red-500' : 'text-green-500'">{{ (row.diff * 100).toFixed(2) }}%</td>
                             </tr>
                         </tbody>
@@ -422,6 +470,24 @@
                 
                 // 共享的鑽石分佈 (模擬表與遊戲共用)
                 const currentDiamondSet = ref(new Set());
+                // 新增：共享的固定增幅設定 (Map<Step, Increment>)
+                const fixedIncrements = ref(new Map());
+
+                // Helper: Format to 40 decimal places
+                const formatFull = (num) => {
+                    if (typeof num !== 'number') return '0.00%';
+                    try {
+                        return (num * 100).toFixed(40) + '%';
+                    } catch (e) {
+                        return (num * 100).toFixed(20) + '%';
+                    }
+                };
+
+                // Helper: Format to 40 decimal places AND split into 3 lines (approx 15 chars each)
+                const formatSplit = (num) => {
+                    const str = formatFull(num);
+                    return str.match(/.{1,15}/g).join('\n');
+                };
 
                 // --- 核心配置 (Config) ---
                 const config = reactive({
@@ -431,6 +497,7 @@
                     minInc: 2.0,
                     maxInc: 4.0,
                     simBet: 100,
+                    customDiamondString: "", // 新增：定向輸入字串
                     diamondRules: [
                         { minMines: 1, maxMines: 5, minDiamonds: 5, maxDiamonds: 12 },
                         { minMines: 6, maxMines: 10, minDiamonds: 5, maxDiamonds: 9 },
@@ -461,7 +528,8 @@
                 const ui = reactive({
                     redBagOpen: false,
                     blueBagOpen: false,
-                    rulesOpen: false
+                    rulesOpen: false,
+                    customInputOpen: false // 新增
                 });
 
                 // 模擬結果表格
@@ -562,8 +630,33 @@
                     const totalCells = 25;
                     const safeCells = totalCells - config.mines;
                     
+                    // --- 定向生成解析邏輯 (New) ---
+                    let useFixed = false;
+                    let customMap = new Map();
+                    if (config.customDiamondString && config.customDiamondString.trim() !== '') {
+                        try {
+                            const pairs = config.customDiamondString.split(',');
+                            pairs.forEach(p => {
+                                const [s, i] = p.split(':').map(n => parseFloat(n.trim()));
+                                if (!isNaN(s) && !isNaN(i) && s > 0 && s <= safeCells) {
+                                    customMap.set(s, i);
+                                }
+                            });
+                            if (customMap.size > 0) useFixed = true;
+                        } catch (e) {
+                            console.error("Parse custom config failed", e);
+                        }
+                    }
+
                     // 重新生成一組鑽石並更新共享狀態
-                    const simDiamonds = generateDiamonds(totalCells, config.mines);
+                    let simDiamonds;
+                    if (useFixed) {
+                        simDiamonds = new Set(customMap.keys());
+                        fixedIncrements.value = customMap; // 將解析好的增幅存入共享狀態
+                    } else {
+                        simDiamonds = generateDiamonds(totalCells, config.mines);
+                        fixedIncrements.value = new Map(); // 清空固定增幅
+                    }
                     currentDiamondSet.value = simDiamonds;
                     
                     let rows = [];
@@ -577,8 +670,13 @@
                         
                         let inc = 0;
                         if(simDiamonds.has(step)) {
-                            inc = Math.random() * (config.maxInc - config.minInc) + config.minInc;
-                            inc = Math.round(inc * 10) / 10;
+                            // 若啟用固定模式且該步在設定中，使用固定值；否則使用隨機
+                            if (useFixed && customMap.has(step)) {
+                                inc = customMap.get(step);
+                            } else {
+                                inc = Math.random() * (config.maxInc - config.minInc) + config.minInc;
+                                inc = Math.round(inc * 10) / 10;
+                            }
                             appRtp += inc;
                         }
                         
@@ -744,8 +842,15 @@
                     // 2. 鑽石判定與變價
                     let isDiamond = gameState.diamondSet.has(step);
                     if(isDiamond) {
-                        let inc = Math.random() * (config.maxInc - config.minInc) + config.minInc;
-                        inc = Math.round(inc * 10) / 10;
+                        let inc = 0;
+                        // --- 定向判定邏輯 (New) ---
+                        // 如果該步驟在固定增幅表中有定義，則使用固定值，否則使用隨機
+                        if (fixedIncrements.value.has(step)) {
+                            inc = fixedIncrements.value.get(step);
+                        } else {
+                            inc = Math.random() * (config.maxInc - config.minInc) + config.minInc;
+                            inc = Math.round(inc * 10) / 10;
+                        }
                         gameState.currentVisualRtp += inc;
                         
                         // [關鍵] 觸發變價：重新計算從這一步開始的所有未來賠率
@@ -869,7 +974,15 @@
                     const subPoolThreshold = safeFloat(config.jpSystem.subPoolThreshold) || 120000;
 
                     const data = {
-                        gameConfig: { gameName: "ChickyMines", simulationBet: config.simBet, simulationRuns: 100000000, totalCells: 25, minMines: 1, maxMines: 20 },
+                        gameConfig: { 
+                            gameName: "ChickyMines", 
+                            simulationBet: config.simBet, 
+                            simulationRuns: 100000000, 
+                            totalCells: 25, 
+                            minMines: 1, 
+                            maxMines: 20
+                            // 修正：移除 customDiamondString，因為已經有 debug_fixedPatterns
+                        },
                         mathModel: { minesTargetRTP: config.targetRtp/100, baseAppRTP: config.baseRtp/100, diamondIncMin: config.minInc/100, diamondIncMax: config.maxInc/100 },
                         diamondGenerationRules: config.diamondRules,
                         bagSystem: { triggerProbability: config.bagSystem.prob/100, prizes: config.bagSystem.prizes.map(p=>({multiplier: p.mult, weight: p.weight})) },
@@ -887,6 +1000,30 @@
                             }))
                         }
                     };
+
+                    // 僅當有內容時才匯出定向規則與 Debug 資訊
+                    if (config.customDiamondString && config.customDiamondString.trim() !== '') {
+                        
+                        let debugFixedRules = [];
+                        try {
+                            const pairs = config.customDiamondString.split(',');
+                            pairs.forEach(p => {
+                                const parts = p.split(':');
+                                if(parts.length === 2) {
+                                    const s = parseInt(parts[0].trim());
+                                    const i = parseFloat(parts[1].trim());
+                                    if (!isNaN(s) && !isNaN(i)) {
+                                        debugFixedRules.push({ step: s, rtp_inc: i });
+                                    }
+                                }
+                            });
+                        } catch (e) { console.error(e); }
+                        
+                        if (debugFixedRules.length > 0) {
+                            data.debug_fixedPatterns = debugFixedRules;
+                        }
+                    }
+
                     const blob = new Blob([JSON.stringify(data, null, 2)], {type: "application/json"});
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
@@ -902,6 +1039,15 @@
                             const json = JSON.parse(ev.target.result);
                             if(json.gameConfig) {
                                 config.simBet = json.gameConfig.simulationBet || 100;
+                                // 修正：如果沒有 customDiamondString，但有 debug_fixedPatterns，嘗試還原
+                                if (json.gameConfig.customDiamondString) {
+                                    config.customDiamondString = json.gameConfig.customDiamondString;
+                                } else if (json.debug_fixedPatterns && Array.isArray(json.debug_fixedPatterns)) {
+                                    // 還原邏輯
+                                    config.customDiamondString = json.debug_fixedPatterns
+                                        .map(p => `${p.step}:${p.rtp_inc}`)
+                                        .join(', ');
+                                }
                             }
                             if(json.mathModel) {
                                 config.targetRtp = json.mathModel.minesTargetRTP * 100;
@@ -958,7 +1104,8 @@
                     redBagRtp, blueBagRtp, blueBowlStats, totalSystemRtp,
                     startGame, onCellClick, cashOut, getCellClass,
                     calculateTable, exportConfig, handleImport,
-                    addRedPrize, removeRedPrize, addBluePrize, removeBluePrize, addRule, removeRule
+                    addRedPrize, removeRedPrize, addBluePrize, removeBluePrize, addRule, removeRule,
+                    formatFull, formatSplit
                 };
             }
         }).mount('#app');
