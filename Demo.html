@@ -87,7 +87,7 @@
             <div class="p-6 flex flex-col md:flex-row justify-between items-center gap-4 border-b border-slate-700">
                 <div>
                     <h1 class="text-2xl font-bold tracking-wide">ChickyMines 數值中心</h1>
-                    <p class="text-slate-400 text-sm mt-1">Version 1.7.6 | 動態變價與聚寶盆模擬 (Dev Mode)</p>
+                    <p class="text-slate-400 text-sm mt-1">Version 1.7.7 | 動態變價與聚寶盆模擬 (Dev Mode)</p>
                 </div>
                 <!-- 頁籤切換 -->
                 <div class="flex bg-slate-800 p-1 rounded-lg">
@@ -682,7 +682,7 @@
                         
                         let rawPayout = (1 / vCum) * (appRtp / 100);
 						// 加上 Number.EPSILON 抵銷浮點數微小凹陷
-						let payout = Math.round((rawPayout + Number.EPSILON) * 100) / 100;
+						let payout = Math.round((rawPayout + 1e-9) * 100) / 100;
                         if(payout < 1.00) payout = 1.00;
                         
                         let targetRealCum = (config.targetRtp / 100) / payout;
