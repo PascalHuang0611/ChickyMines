@@ -87,7 +87,7 @@
             <div class="p-6 flex flex-col md:flex-row justify-between items-center gap-4 border-b border-slate-700">
                 <div>
                     <h1 class="text-2xl font-bold tracking-wide">ChickyMines 數值中心</h1>
-                    <p class="text-slate-400 text-sm mt-1">Version 1.7.7 | 動態變價與聚寶盆模擬 (Dev Mode)</p>
+                    <p class="text-slate-400 text-sm mt-1">Version 1.8.0 | 動態變價與聚寶盆模擬 (Dev Mode)</p>
                 </div>
                 <!-- 頁籤切換 -->
                 <div class="flex bg-slate-800 p-1 rounded-lg">
@@ -147,18 +147,18 @@
                         </div>
                     </div>
 
-                    <!-- 聚寶盆設定 (紅/藍) -->
+                    <!-- 聚寶盆設定 (紅/藍 對調後：藍為倍率，紅為Jackpot) -->
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <!-- 紅聚寶盆 -->
-                        <div class="bg-red-50 border border-red-200 rounded p-4">
+                        <!-- 藍聚寶盆 (原為紅，負責倍率) -->
+                        <div class="bg-blue-50 border border-blue-200 rounded p-4">
                             <div class="flex justify-between items-center mb-2 cursor-pointer" @click="ui.redBagOpen = !ui.redBagOpen">
-                                <h3 class="font-bold text-red-800">🧧 紅聚寶盆 (倍率)</h3>
-                                <span class="text-xs text-red-600 font-bold">RTP: {{ redBagRtp }}%</span>
+                                <h3 class="font-bold text-blue-900">💎 藍聚寶盆 (倍率)</h3>
+                                <span class="text-xs text-blue-600 font-bold">RTP: {{ redBagRtp }}%</span>
                             </div>
                             <div v-show="ui.redBagOpen">
                                 <div class="input-group mb-2">
-                                    <label class="text-xs text-red-800">觸發機率 (%)</label>
-                                    <input type="number" v-model.number="config.bagSystem.prob" step="0.01" class="border-red-300">
+                                    <label class="text-xs text-blue-900">觸發機率 (%)</label>
+                                    <input type="number" v-model.number="config.bagSystem.prob" step="0.01" class="border-blue-300">
                                 </div>
                                 <div class="max-h-32 overflow-y-auto">
                                     <table class="w-full text-xs text-center">
@@ -168,19 +168,19 @@
                                             <td class="text-red-500 cursor-pointer" @click="removeRedPrize(idx)">×</td>
                                         </tr>
                                     </table>
-                                    <button @click="addRedPrize" class="w-full mt-1 text-xs bg-red-200 hover:bg-red-300 rounded">+ 獎項</button>
+                                    <button @click="addRedPrize" class="w-full mt-1 text-xs bg-blue-200 hover:bg-blue-300 rounded">+ 獎項</button>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- 藍聚寶盆 (升級版：動態權重表格) -->
-                        <div class="bg-blue-50 border border-blue-200 rounded p-4">
+                        <!-- 紅聚寶盆 (原為藍，負責 Jackpot) -->
+                        <div class="bg-red-50 border border-red-200 rounded p-4">
                             <div class="flex justify-between items-center mb-2 cursor-pointer" @click="ui.blueBagOpen = !ui.blueBagOpen">
                                 <div class="flex items-center gap-2">
-                                    <h3 class="font-bold text-blue-900">💎 藍聚寶盆 (Jackpot)</h3>
-                                    <span class="text-xs bg-blue-100 text-blue-800 px-1 rounded">{{ blueBowlStats.weightMult.toFixed(1) }}x</span>
+                                    <h3 class="font-bold text-red-800">🧧 紅聚寶盆 (Jackpot)</h3>
+                                    <span class="text-xs bg-red-100 text-red-800 px-1 rounded">{{ blueBowlStats.weightMult.toFixed(1) }}x</span>
                                 </div>
-                                <span class="text-xs text-blue-600 font-bold">RTP: {{ blueBagRtp }}%</span>
+                                <span class="text-xs text-red-600 font-bold">RTP: {{ blueBagRtp }}%</span>
                             </div>
                             <div v-show="ui.blueBagOpen">
                                 <div class="grid grid-cols-2 gap-2 mb-2">
@@ -190,18 +190,18 @@
                                     <div class="input-group"><label class="text-xs">啟用門檻</label><input type="number" v-model.number="config.jpSystem.minBet"></div>
                                     <div class="input-group"><label class="text-xs">主池灌水%</label><input type="number" v-model.number="config.jpSystem.mainPump" step="0.1"></div>
                                     <div class="input-group"><label class="text-xs">副池灌水%</label><input type="number" v-model.number="config.jpSystem.subPump" step="0.1"></div>
-                                    <div class="input-group col-span-2 bg-blue-100 p-1 rounded"><label class="text-xs text-blue-900 font-bold">模擬 BET</label><input type="number" v-model.number="config.simBet" class="font-bold text-blue-800"></div>
+                                    <div class="input-group col-span-2 bg-red-100 p-1 rounded"><label class="text-xs text-red-900 font-bold">模擬 BET</label><input type="number" v-model.number="config.simBet" class="font-bold text-red-800"></div>
                                 </div>
                                 
                                 <!-- 詳細權重表格 -->
                                 <div class="overflow-x-auto">
                                     <table class="w-full text-xs text-left mb-2">
-                                        <thead class="bg-blue-100 text-blue-800">
+                                        <thead class="bg-red-100 text-red-800">
                                             <tr>
                                                 <th class="p-1">獎項</th>
                                                 <th class="p-1">水池%</th>
                                                 <th class="p-1">基礎</th>
-                                                <th class="p-1 text-blue-700">真實</th>
+                                                <th class="p-1 text-red-700">真實</th>
                                                 <th class="p-1 text-right">中獎%</th>
                                                 <th class="p-1"></th>
                                             </tr>
@@ -211,7 +211,7 @@
                                                 <td><input v-model="config.jpSystem.prizes[idx].name" class="w-10 border rounded px-1"></td>
                                                 <td><input v-model.number="config.jpSystem.prizes[idx].percent" class="w-8 text-center border rounded"></td>
                                                 <td><input v-model.number="config.jpSystem.prizes[idx].baseWeight" class="w-8 text-center border rounded"></td>
-                                                <td class="font-bold text-blue-600">{{ stat.realWeight.toLocaleString() }}</td>
+                                                <td class="font-bold text-red-600">{{ stat.realWeight.toLocaleString() }}</td>
                                                 <td class="text-right text-gray-500">{{ stat.probStr }}%</td>
                                                 <td class="text-center text-red-500 cursor-pointer" @click="removeBluePrize(idx)">×</td>
                                             </tr>
@@ -223,7 +223,7 @@
                                             </tr>
                                         </tbody>
                                     </table>
-                                    <button @click="addBluePrize" class="w-full mt-1 text-xs bg-blue-200 hover:bg-blue-300 rounded">+ 獎項</button>
+                                    <button @click="addBluePrize" class="w-full mt-1 text-xs bg-red-200 hover:bg-red-300 rounded">+ 獎項</button>
                                 </div>
                             </div>
                         </div>
@@ -339,28 +339,28 @@
             <!-- TAB 2: 遊戲試玩 (Playable Demo) -->
             <div v-show="activeTab === 'game'" class="p-6 bg-slate-100 min-h-[600px] flex flex-col md:flex-row gap-6 justify-center items-start">
                 
-                <!-- 左側面板：聚寶盆狀態 (新增) -->
+                <!-- 左側面板：聚寶盆狀態 (已對調紅藍樣式與名稱) -->
                 <div class="hidden md:flex flex-col gap-4 w-48">
-                    <!-- 紅聚寶盆 -->
-                    <div class="bg-red-50 border border-red-200 rounded-xl p-3 shadow text-center flex flex-col justify-center h-24"
-                         :class="{ 'border-red-500 shadow-red-200 bowl-triggered': gameState.redBagResult.triggered }">
-                        <span class="text-3xl mb-1">🧧</span>
-                        <div v-if="gameState.redBagResult.triggered">
-                            <span class="text-xs text-red-600 font-bold">贏得獎金</span>
-                            <div class="font-black text-xl text-red-700">${{ gameState.redBagResult.amount.toFixed(0) }}</div>
-                        </div>
-                        <div v-else class="text-gray-400 text-sm font-bold">紅聚寶盆</div>
-                    </div>
-
-                    <!-- 藍聚寶盆 -->
+                    <!-- 藍聚寶盆 (原為紅，處理倍率) -->
                     <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 shadow text-center flex flex-col justify-center h-24"
-                         :class="{ 'border-blue-500 shadow-blue-200 bowl-triggered': gameState.blueBagResult.triggered }">
+                         :class="{ 'border-blue-500 shadow-blue-200 bowl-triggered': gameState.redBagResult.triggered }">
                         <span class="text-3xl mb-1">💎</span>
-                        <div v-if="gameState.blueBagResult.triggered">
-                            <span class="text-xs text-blue-600 font-bold">JACKPOT</span>
-                            <div class="font-black text-xl text-blue-700">{{ gameState.blueBagResult.name }}</div>
+                        <div v-if="gameState.redBagResult.triggered">
+                            <span class="text-xs text-blue-600 font-bold">贏得獎金</span>
+                            <div class="font-black text-xl text-blue-700">${{ gameState.redBagResult.amount.toFixed(0) }}</div>
                         </div>
                         <div v-else class="text-gray-400 text-sm font-bold">藍聚寶盆</div>
+                    </div>
+
+                    <!-- 紅聚寶盆 (原為藍，處理 Jackpot) -->
+                    <div class="bg-red-50 border border-red-200 rounded-xl p-3 shadow text-center flex flex-col justify-center h-24"
+                         :class="{ 'border-red-500 shadow-red-200 bowl-triggered': gameState.blueBagResult.triggered }">
+                        <span class="text-3xl mb-1">🧧</span>
+                        <div v-if="gameState.blueBagResult.triggered">
+                            <span class="text-xs text-red-600 font-bold">JACKPOT</span>
+                            <div class="font-black text-xl text-red-700">{{ gameState.blueBagResult.name }}</div>
+                        </div>
+                        <div v-else class="text-gray-400 text-sm font-bold">紅聚寶盆</div>
                     </div>
                 </div>
 
@@ -526,8 +526,8 @@
 
                 // UI 狀態 (展開/收合)
                 const ui = reactive({
-                    redBagOpen: false,
-                    blueBagOpen: false,
+                    redBagOpen: false, // 現用來控制藍聚寶盆(倍率)的展開
+                    blueBagOpen: false, // 現用來控制紅聚寶盆(Jackpot)的展開
                     rulesOpen: false,
                     customInputOpen: false // 新增
                 });
@@ -550,12 +550,12 @@
                     message: '',
                     messageType: '',
                     ladder: [], // 賠率階梯表
-                    // 新增：聚寶盆結果
+                    // 聚寶盆結果 (底層變數不變，維持相容性)
                     redBagResult: { triggered: false, amount: 0 },
                     blueBagResult: { triggered: false, name: '' }
                 });
 
-                // --- 計算屬性 (紅色) ---
+                // --- 計算屬性 (藍色倍率 - 邏輯上原為紅) ---
                 const redBagRtp = computed(() => {
                     let totalW = config.bagSystem.prizes.reduce((s, p) => s + (p.weight || 0), 0);
                     let weightedSum = config.bagSystem.prizes.reduce((s, p) => s + (p.mult * (p.weight || 0)), 0);
@@ -563,7 +563,7 @@
                     return (config.bagSystem.prob / 100 * avgMult * 100).toFixed(2);
                 });
 
-                // --- 計算屬性 (藍色詳細) ---
+                // --- 計算屬性 (紅色 Jackpot - 邏輯上原為藍) ---
                 const blueBowlStats = computed(() => {
                     const minBet = config.jpSystem.minBet || 1;
                     const simBet = config.simBet || 100;
@@ -778,7 +778,7 @@
                         type: 'unknown' 
                     }));
 
-                    // 3. 觸發紅聚寶盆 (獨立事件)
+                    // 3. 觸發藍聚寶盆 (原紅，獨立事件)
                     if(Math.random() < config.bagSystem.prob / 100) {
                         let totalW = config.bagSystem.prizes.reduce((s,p)=>s+p.weight,0);
                         let rnd = Math.random() * totalW;
@@ -795,7 +795,7 @@
                         }
                     }
 
-                    // 4. 觸發藍聚寶盆 (獨立事件) - 模擬邏輯
+                    // 4. 觸發紅聚寶盆 (原藍，獨立事件) - 模擬邏輯
                     const stats = blueBowlStats.value;
                     const totalSysWeight = config.jpSystem.totalWeight || 100000000;
                     const randBlue = Math.random() * totalSysWeight;
@@ -806,7 +806,7 @@
                         if (randBlue < currentWeightCursor) {
                             // 中獎
                             gameState.blueBagResult = { triggered: true, name: prize.name };
-                            // 藍聚寶盆通常也會有獎金，這裡假設只顯示名稱，如需加錢可在此處
+                            // Jackpot 通常也會有獎金，這裡假設只顯示名稱，如需加錢可在此處
                             break;
                         }
                     }
@@ -982,7 +982,6 @@
                             totalCells: 25, 
                             minMines: 1, 
                             maxMines: 20
-                            // 修正：移除 customDiamondString，因為已經有 debug_fixedPatterns
                         },
                         mathModel: { minesTargetRTP: config.targetRtp/100, baseAppRTP: config.baseRtp/100, diamondIncMin: config.minInc/100, diamondIncMax: config.maxInc/100 },
                         diamondGenerationRules: config.diamondRules,
